@@ -1,0 +1,6 @@
+# Set the address and port Borgsphere listen on
+DEMO_ADDR=0.0.0.0:5018
+DEMO_APP_ADDR=localhost:5019
+
+
+
