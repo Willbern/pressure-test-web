@@ -22,6 +22,17 @@ func (api *Api) Pong(ctx *gin.Context) {
 	HttpOkResponse(ctx, "pong")
 }
 
+func (api *Api) ResponseJson(ctx *gin.Context) {
+	r, err := api.HttpClient.GET(c, "http://"+api.Config.DemoAppAddr+"/json", nil, nil)
+	if err != nil {
+		log.Error("get json error: ", err.Error())
+		HttpErrorResponse(ctx, http.StatusServiceUnavailable, err)
+	}
+
+	ctx.String(http.StatusOK, string(r))
+	return
+}
+
 func (api *Api) Add(ctx *gin.Context) {
 	var app model.App
 	err := ctx.BindJSON(&app)
