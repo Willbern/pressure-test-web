@@ -188,6 +188,7 @@ func (cli *Client) do(ctx context.Context, requestUrl, method string, query url.
 			headers = make(map[string][]string)
 		}
 		headers["Content-Type"] = []string{"application/json"}
+		headers["Connection"] = []string{"Keep-Alive"}
 	}
 
 	return cli.sendRequest(ctx, requestUrl, method, query, body, headers)

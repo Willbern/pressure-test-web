@@ -9,6 +9,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/gin-gonic/gin"
+	"github.com/smallnest/goreq"
 	"golang.org/x/net/context"
 )
 
@@ -23,13 +24,13 @@ func (api *Api) Pong(ctx *gin.Context) {
 }
 
 func (api *Api) ResponseJson(ctx *gin.Context) {
-	r, err := api.HttpClient.GET(c, "http://"+api.Config.DemoAppAddr+"/json", nil, nil)
-	if err != nil {
-		log.Error("get json error: ", err.Error())
-		HttpErrorResponse(ctx, http.StatusServiceUnavailable, err)
+	_, b, errs := goreq.New().SetHeader("Connection", "Keep- Alive").Get("http://" + api.Config.DemoAppAddr + "/json").End()
+	if len(errs) != 0 {
+		log.Error("get json error: ", errs[0].Error())
+		HttpErrorResponse(ctx, http.StatusServiceUnavailable, errs[0])
 	}
 
-	ctx.String(http.StatusOK, string(r))
+	ctx.String(http.StatusOK, b)
 	return
 }
 
