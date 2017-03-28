@@ -17,7 +17,10 @@ func (api *Api) ApiRouter() *gin.Engine {
 	router := gin.New()
 
 	router.GET("/ping", api.Pong)
-	router.GET("/json", api.ResponseJson)
+	router.GET("/goreq", api.ResponseJson)
+	router.GET("/origin", api.ResponseJsonLocal)
+	router.GET("/keepalive", api.ResponseJsonKeepAlive)
+	router.GET("/notkeepalive", api.ResponseJsonNotKeepAlive)
 	router.POST("/add", api.Add)
 	router.GET("/get/:id", api.Get)
 	router.DELETE("/delete/:id", api.Delete)

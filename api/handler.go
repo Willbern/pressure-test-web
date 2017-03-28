@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 
@@ -24,7 +26,7 @@ func (api *Api) Pong(ctx *gin.Context) {
 }
 
 func (api *Api) ResponseJson(ctx *gin.Context) {
-	_, b, errs := goreq.New().SetHeader("Connection", "Keep- Alive").Get("http://" + api.Config.DemoAppAddr + "/json").End()
+	_, b, errs := goreq.New().Get("http://" + api.Config.DemoAppAddr + "/json").End()
 	if len(errs) != 0 {
 		log.Error("get json error: ", errs[0].Error())
 		HttpErrorResponse(ctx, http.StatusServiceUnavailable, errs[0])
@@ -32,6 +34,96 @@ func (api *Api) ResponseJson(ctx *gin.Context) {
 
 	ctx.String(http.StatusOK, b)
 	return
+}
+
+func setHeader(request *http.Request, owner string, name string) {
+	request.Header.Add("Content-Type", "application/json")
+	request.Header.Add("Connection", "Keep-Alive")
+	request.Close = true
+}
+
+func (api *Api) ResponseJsonLocal(ctx *gin.Context) {
+	request, err := http.NewRequest("GET", "http://"+api.Config.DemoAppAddr+"/json", nil)
+	if err != nil {
+		return
+	}
+
+	request.Header.Add("Content-Type", "application/json")
+	request.Header.Add("Connection", "Keep-Alive")
+	request.Close = true
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		err = errors.New("response not 200")
+		log.Warn(err)
+		return
+	}
+
+	result, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return
+	}
+
+	ctx.String(http.StatusOK, string(result))
+}
+
+func (api *Api) ResponseJsonNotKeepAlive(ctx *gin.Context) {
+	request, err := http.NewRequest("GET", "http://"+api.Config.DemoAppAddr+"/json", nil)
+	if err != nil {
+		return
+	}
+
+	request.Header.Add("Content-Type", "application/json")
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		err = errors.New("response not 200")
+		log.Warn(err)
+		return
+	}
+
+	result, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return
+	}
+
+	ctx.String(http.StatusOK, string(result))
+}
+
+func (api *Api) ResponseJsonKeepAlive(ctx *gin.Context) {
+	request, err := http.NewRequest("GET", "http://"+api.Config.DemoAppAddr+"/json", nil)
+	if err != nil {
+		return
+	}
+
+	request.Header.Add("Content-Type", "application/json")
+	request.Header.Add("Connection", "Keep-Alive")
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		err = errors.New("response not 200")
+		log.Warn(err)
+		return
+	}
+
+	result, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return
+	}
+
+	ctx.String(http.StatusOK, string(result))
 }
 
 func (api *Api) Add(ctx *gin.Context) {
