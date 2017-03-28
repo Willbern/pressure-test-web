@@ -28,10 +28,10 @@ for each family.
 A trace.EventLog provides tracing for long-lived objects, such as RPC
 connections.
 
-	// A Fetcher fetches URL paths for a single domain.
+        // A Fetcher fetches URL paths for a single domain.
 	type Fetcher struct {
 		domain string
-		events trace.EventLog
+		events *trace.EventLog
 	}
 
 	func NewFetcher(domain string) *Fetcher {
@@ -42,18 +42,17 @@ connections.
 	}
 
 	func (f *Fetcher) Fetch(path string) (string, error) {
-		resp, err := http.Get("http://" + f.domain + "/" + path)
+		resp, err := http.Get("http://"+domain+"/"+path)
 		if err != nil {
 			f.events.Errorf("Get(%q) = %v", path, err)
-			return "", err
+			return
 		}
-		f.events.Printf("Get(%q) = %s", path, resp.Status)
+		f.events.Printf("Get(%q) = %s", path, resp.Code)
 		...
 	}
 
 	func (f *Fetcher) Close() error {
 		f.events.Finish()
-		return nil
 	}
 
 The /debug/events HTTP endpoint organizes the event logs by family and
@@ -85,25 +84,19 @@ import (
 // FOR DEBUGGING ONLY. This will slow down the program.
 var DebugUseAfterFinish = false
 
-// AuthRequest determines whether a specific request is permitted to load the
-// /debug/requests or /debug/events pages.
-//
+// AuthRequest determines whether a specific request is permitted to load the /debug/requests page.
 // It returns two bools; the first indicates whether the page may be viewed at all,
 // and the second indicates whether sensitive events will be shown.
 //
 // AuthRequest may be replaced by a program to customise its authorisation requirements.
 //
-// The default AuthRequest function returns (true, true) if and only if the request
-// comes from localhost/127.0.0.1/[::1].
+// The default AuthRequest function returns (true, true) iff the request comes from localhost/127.0.0.1/[::1].
 var AuthRequest = func(req *http.Request) (any, sensitive bool) {
-	// RemoteAddr is commonly in the form "IP" or "IP:port".
-	// If it is in the form "IP:port", split off the port.
 	host, _, err := net.SplitHostPort(req.RemoteAddr)
-	if err != nil {
-		host = req.RemoteAddr
-	}
-	switch host {
-	case "localhost", "127.0.0.1", "::1":
+	switch {
+	case err != nil: // Badly formed address; fail closed.
+		return false, false
+	case host == "localhost" || host == "127.0.0.1" || host == "::1":
 		return true, true
 	default:
 		return false, false
@@ -117,8 +110,7 @@ func init() {
 			http.Error(w, "not allowed", http.StatusUnauthorized)
 			return
 		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		Render(w, req, sensitive)
+		render(w, req, sensitive)
 	})
 	http.HandleFunc("/debug/events", func(w http.ResponseWriter, req *http.Request) {
 		any, sensitive := AuthRequest(req)
@@ -126,16 +118,13 @@ func init() {
 			http.Error(w, "not allowed", http.StatusUnauthorized)
 			return
 		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		RenderEvents(w, req, sensitive)
+		renderEvents(w, req, sensitive)
 	})
 }
 
-// Render renders the HTML page typically served at /debug/requests.
-// It does not do any auth checking; see AuthRequest for the default auth check
-// used by the handler registered on http.DefaultServeMux.
+// render renders the HTML page.
 // req may be nil.
-func Render(w io.Writer, req *http.Request, sensitive bool) {
+func render(w io.Writer, req *http.Request, sensitive bool) {
 	data := &struct {
 		Families         []string
 		ActiveTraceCount map[string]int
@@ -178,7 +167,7 @@ func Render(w io.Writer, req *http.Request, sensitive bool) {
 
 	completedMu.RLock()
 	data.Families = make([]string, 0, len(completedTraces))
-	for fam := range completedTraces {
+	for fam, _ := range completedTraces {
 		data.Families = append(data.Families, fam)
 	}
 	completedMu.RUnlock()
@@ -962,7 +951,7 @@ const pageHTML = `
 
 		{{$n := index $.ActiveTraceCount $fam}}
 		<td class="active {{if not $n}}empty{{end}}">
-			{{if $n}}<a href="?fam={{$fam}}&b=-1{{if $.Expanded}}&exp=1{{end}}">{{end}}
+			{{if $n}}<a href="/debug/requests?fam={{$fam}}&b=-1{{if $.Expanded}}&exp=1{{end}}">{{end}}
 			[{{$n}} active]
 			{{if $n}}</a>{{end}}
 		</td>
@@ -971,7 +960,7 @@ const pageHTML = `
 		{{range $i, $b := $f.Buckets}}
 		{{$empty := $b.Empty}}
 		<td {{if $empty}}class="empty"{{end}}>
-		{{if not $empty}}<a href="?fam={{$fam}}&b={{$i}}{{if $.Expanded}}&exp=1{{end}}">{{end}}
+		{{if not $empty}}<a href="/debug/requests?fam={{$fam}}&b={{$i}}{{if $.Expanded}}&exp=1{{end}}">{{end}}
 		[{{.Cond}}]
 		{{if not $empty}}</a>{{end}}
 		</td>
@@ -979,13 +968,13 @@ const pageHTML = `
 
 		{{$nb := len $f.Buckets}}
 		<td class="latency-first">
-		<a href="?fam={{$fam}}&b={{$nb}}">[minute]</a>
+		<a href="/debug/requests?fam={{$fam}}&b={{$nb}}">[minute]</a>
 		</td>
 		<td>
-		<a href="?fam={{$fam}}&b={{add $nb 1}}">[hour]</a>
+		<a href="/debug/requests?fam={{$fam}}&b={{add $nb 1}}">[hour]</a>
 		</td>
 		<td>
-		<a href="?fam={{$fam}}&b={{add $nb 2}}">[total]</a>
+		<a href="/debug/requests?fam={{$fam}}&b={{add $nb 2}}">[total]</a>
 		</td>
 
 	</tr>
@@ -999,25 +988,25 @@ const pageHTML = `
 <h3>Family: {{$.Family}}</h3>
 
 {{if or $.Expanded $.Traced}}
-  <a href="?fam={{$.Family}}&b={{$.Bucket}}">[Normal/Summary]</a>
+  <a href="/debug/requests?fam={{$.Family}}&b={{$.Bucket}}">[Normal/Summary]</a>
 {{else}}
   [Normal/Summary]
 {{end}}
 
 {{if or (not $.Expanded) $.Traced}}
-  <a href="?fam={{$.Family}}&b={{$.Bucket}}&exp=1">[Normal/Expanded]</a>
+  <a href="/debug/requests?fam={{$.Family}}&b={{$.Bucket}}&exp=1">[Normal/Expanded]</a>
 {{else}}
   [Normal/Expanded]
 {{end}}
 
 {{if not $.Active}}
 	{{if or $.Expanded (not $.Traced)}}
-	<a href="?fam={{$.Family}}&b={{$.Bucket}}&rtraced=1">[Traced/Summary]</a>
+	<a href="/debug/requests?fam={{$.Family}}&b={{$.Bucket}}&rtraced=1">[Traced/Summary]</a>
 	{{else}}
 	[Traced/Summary]
 	{{end}}
 	{{if or (not $.Expanded) (not $.Traced)}}
-	<a href="?fam={{$.Family}}&b={{$.Bucket}}&exp=1&rtraced=1">[Traced/Expanded]</a>
+	<a href="/debug/requests?fam={{$.Family}}&b={{$.Bucket}}&exp=1&rtraced=1">[Traced/Expanded]</a>
         {{else}}
 	[Traced/Expanded]
 	{{end}}
