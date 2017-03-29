@@ -151,14 +151,31 @@ func (api *Api) Get(ctx *gin.Context) {
 		HttpErrorResponse(ctx, http.StatusServiceUnavailable, err)
 	}
 
-	r, err := api.HttpClient.GET(c, "http://"+api.Config.DemoAppAddr+"/get/"+idStr, nil, nil)
+	request, err := http.NewRequest("GET", "http://"+api.Config.DemoAppAddr+"/get/"+idStr, nil)
 	if err != nil {
-		log.Error("add app error: ", err.Error())
-		HttpErrorResponse(ctx, http.StatusServiceUnavailable, err)
+		return
+	}
+
+	request.Header.Add("Content-Type", "application/json")
+	client := &http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		return
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		err = errors.New("response not 200")
+		log.Warn(err)
+		return
+	}
+
+	result, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return
 	}
 
 	var app model.App
-	err = json.Unmarshal(r, &app)
+	err = json.Unmarshal(result, &app)
 	if err != nil {
 		log.Error("unmarshal app error: ", err.Error())
 		HttpErrorResponse(ctx, http.StatusServiceUnavailable, err)
